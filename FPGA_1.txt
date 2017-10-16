@@ -1,0 +1,132 @@
+LIBRARY IEEE;
+USE IEEE.STD_LOGIC_1164.ALL;
+USE IEEE.STD_LOGIC_UNSIGNED.ALL;
+
+ENTITY hamCode IS
+	PORT(clkIn : IN STD_LOGIC;
+		 dataIn : IN STD_LOGIC_VECTOR(3 DOWNTO 0);
+		 serialOut : OUT STD_LOGIC;
+		 LEDLOut : OUT STD_LOGIC_VECTOR(6 DOWNTO 0);
+		 LEDHOut : OUT STD_LOGIC_VECTOR(6 DOWNTO 0));
+END hamCode;
+
+ARCHITECTURE code OF hamCode IS
+
+TYPE staType IS (idle,start,send,stop);
+
+SIGNAL clk2 : STD_LOGIC;
+SIGNAL cnt : STD_LOGIC_VECTOR(8 DOWNTO 0);
+SIGNAL serialTmp : STD_LOGIC_VECTOR(3 DOWNTO 0);
+SIGNAL dataTmp : STD_LOGIC_VECTOR(7 DOWNTO 0);
+SIGNAL state : staType := idle;
+SIGNAL stopCnt : STD_LOGIC_VECTOR(15 DOWNTO 0);
+
+BEGIN
+
+	PROCESS(clkIn)
+	BEGIN
+		IF (clkIn'EVENT AND clkIn = '1') THEN
+			IF (cnt < 217) THEN
+				cnt <= cnt + 1;
+				clk2 <= '0';
+			ELSIF (cnt < 434) THEN
+				cnt <= cnt + 1;
+				clk2 <= '1';
+			ELSE
+				cnt <= (OTHERS => '0');
+				clk2 <= '0';
+			END IF;
+		END IF;
+	END PROCESS;
+
+	PROCESS(clkIn)
+	BEGIN
+		dataTmp(7 DOWNTO 4) <= dataIn(3 DOWNTO 0);
+		dataTmp(3) <= dataIn(3) XOR dataIn(1) XOR dataIn(0);
+		dataTmp(2) <= dataIn(3) XOR dataIn(2) XOR dataIn(1);
+		dataTmp(1) <= dataIn(2) XOR dataIn(1) XOR dataIn(0);
+		dataTmp(0) <= '0';
+	END PROCESS;
+
+	PROCESS(clk2)
+	BEGIN
+		IF (clk2'EVENT AND clk2 = '1') THEN
+
+			CASE dataTmp(3 DOWNTO 0) IS
+			WHEN "0000" => LEDLOut <= "1000000";
+			WHEN "0001" => LEDLOut <= "1111001";
+			WHEN "0010" => LEDLOut <= "0100100";
+			WHEN "0011" => LEDLOut <= "0110000";
+			WHEN "0100" => LEDLOut <= "0011001";
+			WHEN "0101" => LEDLOut <= "0010010";
+			WHEN "0110" => LEDLOut <= "0000010";
+			WHEN "0111" => LEDLOut <= "1111000";
+			WHEN "1000" => LEDLOut <= "0000000";
+			WHEN "1001" => LEDLOut <= "0010000";
+			WHEN "1010" => LEDLOut <= "0001000";
+			WHEN "1011" => LEDLOut <= "0000011";
+			WHEN "1100" => LEDLOut <= "1000110";
+			WHEN "1101" => LEDLOut <= "0100001";
+			WHEN "1110" => LEDLOut <= "0000110";
+			WHEN OTHERS => LEDLOut <= "0001110";
+			END CASE;
+
+			CASE dataTmp(7 DOWNTO 4) IS
+			WHEN "0000" => LEDHOut <= "1000000";
+			WHEN "0001" => LEDHOut <= "1111001";
+			WHEN "0010" => LEDHOut <= "0100100";
+			WHEN "0011" => LEDHOut <= "0110000";
+			WHEN "0100" => LEDHOut <= "0011001";
+			WHEN "0101" => LEDHOut <= "0010010";
+			WHEN "0110" => LEDHOut <= "0000010";
+			WHEN "0111" => LEDHOut <= "1111000";
+			WHEN "1000" => LEDHOut <= "0000000";
+			WHEN "1001" => LEDHOut <= "0010000";
+			WHEN "1010" => LEDHOut <= "0001000";
+			WHEN "1011" => LEDHOut <= "0000011";
+			WHEN "1100" => LEDHOut <= "1000110";
+			WHEN "1101" => LEDHOut <= "0100001";
+			WHEN "1110" => LEDHOut <= "0000110";
+			WHEN OTHERS => LEDHOut <= "0001110";
+			END CASE;
+
+		END IF;
+
+	END PROCESS;
+
+	PROCESS(clk2)
+	VARIABLE num : INTEGER RANGE 7 DOWNTO 0;
+	BEGIN
+		IF (clk2'EVENT AND clk2 = '1') THEN
+
+			CASE state IS
+			WHEN idle => serialOut <= '1';
+						 state <= start;
+			WHEN start => serialOut <= '0';
+						  num := 0;
+						  state <= send;
+			WHEN send => serialOut <= dataTmp(num);
+						 IF (num<7) THEN
+						 	num := num + 1;
+						 	state <= send;
+						 ELSE
+						 	stopCnt <= X"0000";
+						 	state <= stop;
+						 END IF;
+			WHEN stop => serialOut <= '1';
+						 IF (stopCnt >= X"FFFF") THEN
+						 	stopCnt <= X"0000";
+							state <= idle;
+						 ELSE
+						 	stopCnt <= stopCnt + 1;
+						 	state <= stop;
+						 END IF;
+			WHEN OTHERS => state <= idle;
+			END CASE;
+
+		END IF;
+		
+	END PROCESS;
+
+END code;
+

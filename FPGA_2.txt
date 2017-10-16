@@ -1,0 +1,220 @@
+LIBRARY IEEE;
+USE IEEE.STD_LOGIC_1164.ALL;
+USE IEEE.STD_LOGIC_UNSIGNED.ALL;
+
+ENTITY hamDecode IS
+
+	PORT (clkIn : IN STD_LOGIC;
+		  serialData : STD_LOGIC;
+		  serialLEDL : OUT STD_LOGIC_VECTOR(6 DOWNTO 0);
+		  serialLEDH : OUT STD_LOGIC_VECTOR(6 DOWNTO 0);
+		  decodeLED : OUT STD_LOGIC_VECTOR(6 DOWNTO 0);
+		  ptrErrLED : OUT STD_LOGIC_VECTOR(6 DOWNTO 0));
+
+END ENTITY hamDecode;
+
+ARCHITECTURE decode OF hamDecode IS
+
+TYPE staType IS (idle,data,stop);
+
+SIGNAL clk1 : STD_LOGIC;
+SIGNAL cnt1 : STD_LOGIC_VECTOR(8 DOWNTO 0);
+SIGNAL clk2 : STD_LOGIC;
+SIGNAL cnt2 : STD_LOGIC_VECTOR(7 DOWNTO 0);
+SIGNAL state : staType := idle;
+SIGNAL rcvData : STD_LOGIC_VECTOR (7 DOWNTO 0);
+SIGNAL serialDataNext : STD_LOGIC;
+SIGNAL supervisor : STD_LOGIC_VECTOR(2 DOWNTO 0);
+SIGNAL inforBit : STD_LOGIC_VECTOR(3 DOWNTO 0);
+
+
+BEGIN
+
+	PROCESS(clkIn)
+	BEGIN
+		IF (clkIn'EVENT AND clkIn = '1') THEN
+			IF (cnt1 < 217) THEN
+				cnt1 <= cnt1 + 1;
+				clk1 <= '0';
+			ELSIF (cnt1 < 434) THEN
+				cnt1 <= cnt1 + 1;
+				clk1 <= '1';
+			ELSE
+				cnt1 <= (OTHERS => '0');
+				clk1 <= '0';
+			END IF;
+		END IF;
+	END PROCESS;
+
+	PROCESS(clkIn)
+	BEGIN
+		IF (clkIn'EVENT AND clkIn = '1') THEN
+			IF (cnt2 < 27) THEN
+				cnt2 <= cnt2 + 1;
+				clk2 <= '0';
+			ELSIF (cnt2 < 54) THEN
+				cnt2 <= cnt2 + 1;
+				clk2 <= '1';
+			ELSE
+				cnt2 <= (OTHERS => '0');
+				clk2 <= '0';
+			END IF;
+		END IF;
+	END PROCESS;
+
+	PROCESS(clk2)
+
+	VARIABLE sampNum : INTEGER := 0;
+	VARIABLE dataNum : INTEGER := 0;
+	VARIABLE num0 : INTEGER := 0;
+	VARIABLE num1 : INTEGER := 0;
+	VARIABLE rcvDataTmp : STD_LOGIC_VECTOR(8 DOWNTO 0);
+	VARIABLE isStart : STD_LOGIC := '0';
+
+	BEGIN
+
+		IF (clk2'EVENT AND clk2 = '1') THEN
+			serialDataNext <= serialData;
+			IF (isStart = '0') THEN
+				IF (serialData = '0' AND serialDataNext = '1') THEN
+					isStart := '1';
+				END IF;
+			ELSE
+				IF (serialData = '0') THEN
+					num0 := num0 + 1;
+				ELSE
+					num1 := num1 + 1;
+				END IF;
+				sampNum := sampNum + 1;
+
+				IF (sampNum = 8) THEN
+					IF (num0 > num1) THEN
+						rcvDataTmp(dataNum) := '0';
+					ELSE
+						rcvDataTmp(dataNum) := '1';
+					END IF;
+					dataNum := dataNum + 1;
+					sampNum := 0;
+					num0 := 0;
+					num1 := 0;
+				END IF;
+
+				IF (dataNum = 9) THEN
+					IF (rcvDataTmp(0) = '0') THEN
+						rcvData <= rcvDataTmp(8 DOWNTO 1);
+					END IF;
+					isStart := '0';
+					dataNum := 0;
+				END IF;
+			END IF;
+		END IF;
+	END PROCESS;
+
+	PROCESS(clkIn)
+	VARIABLE rstData : STD_LOGIC_VECTOR (7 DOWNTO 0);
+	BEGIN
+	
+		IF (clkIn'EVENT AND clkIn = '1') THEN
+
+			rstData := rcvData(7 DOWNTO 0);
+			supervisor(2) <= rcvData(7) XOR rcvData(5) XOR rcvData(4) XOR rcvData(3);
+			supervisor(1) <= rcvData(7) XOR rcvData(6) XOR rcvData(5) XOR rcvData(2);
+			supervisor(0) <= rcvData(6) XOR rcvData(5) XOR rcvData(4) XOR rcvData(1);
+
+			CASE supervisor IS
+			WHEN "110" => rstData(7) := NOT rstData(7);
+			WHEN "011" => rstData(6) := NOT rstData(6);
+			WHEN "111" => rstData(5) := NOT rstData(5);
+			WHEN "101" => rstData(4) := NOT rstData(4);
+			WHEN "100" => rstData(3) := NOT rstData(3);
+			WHEN "010" => rstData(2) := NOT rstData(2);
+			WHEN "001" => rstData(1) := NOT rstData(1);
+			WHEN OTHERS => NULL;
+			END CASE;
+			
+			inforBit <= rstData(7 DOWNTO 4);
+
+		END IF;
+
+	END PROCESS;
+
+
+	PROCESS(clk1)
+	BEGIN
+
+		IF (clk1'EVENT AND clk1 = '1') THEN
+
+			CASE rcvData(7 DOWNTO 4) IS
+			WHEN "0000" => serialLEDH <= "1000000";
+			WHEN "0001" => serialLEDH <= "1111001";
+			WHEN "0010" => serialLEDH <= "0100100";
+			WHEN "0011" => serialLEDH <= "0110000";
+			WHEN "0100" => serialLEDH <= "0011001";
+			WHEN "0101" => serialLEDH <= "0010010";
+			WHEN "0110" => serialLEDH <= "0000010";
+			WHEN "0111" => serialLEDH <= "1111000";
+			WHEN "1000" => serialLEDH <= "0000000";
+			WHEN "1001" => serialLEDH <= "0010000";
+			WHEN "1010" => serialLEDH <= "0001000";
+			WHEN "1011" => serialLEDH <= "0000011";
+			WHEN "1100" => serialLEDH <= "1000110";
+			WHEN "1101" => serialLEDH <= "0100001";
+			WHEN "1110" => serialLEDH <= "0000110";
+			WHEN OTHERS => serialLEDH <= "0001110";
+			END CASE;
+
+			CASE rcvData(3 DOWNTO 0) IS
+			WHEN "0000" => serialLEDL <= "1000000";
+			WHEN "0001" => serialLEDL <= "1111001";
+			WHEN "0010" => serialLEDL <= "0100100";
+			WHEN "0011" => serialLEDL <= "0110000";
+			WHEN "0100" => serialLEDL <= "0011001";
+			WHEN "0101" => serialLEDL <= "0010010";
+			WHEN "0110" => serialLEDL <= "0000010";
+			WHEN "0111" => serialLEDL <= "1111000";
+			WHEN "1000" => serialLEDL <= "0000000";
+			WHEN "1001" => serialLEDL <= "0010000";
+			WHEN "1010" => serialLEDL <= "0001000";
+			WHEN "1011" => serialLEDL <= "0000011";
+			WHEN "1100" => serialLEDL <= "1000110";
+			WHEN "1101" => serialLEDL <= "0100001";
+			WHEN "1110" => serialLEDL <= "0000110";
+			WHEN OTHERS => serialLEDL <= "0001110";
+			END CASE;
+
+			CASE inforBit IS
+			WHEN "0000" => decodeLED <= "1000000";
+			WHEN "0001" => decodeLED <= "1111001";
+			WHEN "0010" => decodeLED <= "0100100";
+			WHEN "0011" => decodeLED <= "0110000";
+			WHEN "0100" => decodeLED <= "0011001";
+			WHEN "0101" => decodeLED <= "0010010";
+			WHEN "0110" => decodeLED <= "0000010";
+			WHEN "0111" => decodeLED <= "1111000";
+			WHEN "1000" => decodeLED <= "0000000";
+			WHEN "1001" => decodeLED <= "0010000";
+			WHEN "1010" => decodeLED <= "0001000";
+			WHEN "1011" => decodeLED <= "0000011";
+			WHEN "1100" => decodeLED <= "1000110";
+			WHEN "1101" => decodeLED <= "0100001";
+			WHEN "1110" => decodeLED <= "0000110";
+			WHEN OTHERS => decodeLED <= "0001110";
+			END CASE;
+
+			CASE supervisor IS
+			WHEN "000" => ptrErrLED <= "1000000";
+			WHEN "001" => ptrErrLED <= "1111001";
+			WHEN "010" => ptrErrLED <= "0100100"; 
+			WHEN "011" => ptrErrLED <= "0000010"; 
+			WHEN "100" => ptrErrLED <= "0110000"; 
+			WHEN "101" => ptrErrLED <= "0011001"; 
+			WHEN "110" => ptrErrLED <= "1111000"; 
+			WHEN "111" => ptrErrLED <= "0010010"; 
+			WHEN OTHERS => NULL; 
+			END CASE;
+
+		END IF;
+
+	END PROCESS;
+
+END ARCHITECTURE decode;
